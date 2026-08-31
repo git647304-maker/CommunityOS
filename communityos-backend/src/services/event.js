@@ -1,5 +1,6 @@
 import { prisma } from '../db/connection.js';
 import logger from '../config/logger.js';
+import { emit, EVENTS } from '../utils/events.js';
 
 export async function createEvent(tenantId, orderId, type, actorId, metadata) {
   const event = await prisma.event.create({
@@ -11,6 +12,13 @@ export async function createEvent(tenantId, orderId, type, actorId, metadata) {
       metadata,
     },
   });
+
+  // Emit a timeline-updated event so subscribers can refresh
+  try {
+    await emit(EVENTS.TIMELINE_UPDATED, { tenantId, orderId, event });
+  } catch (err) {
+    logger.error({ err, orderId }, 'Failed to emit timeline update');
+  }
 
   return event;
 }
