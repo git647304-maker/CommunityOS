@@ -17,21 +17,31 @@ export async function createOrder(data, userId, tenantId) {
     }
   }
 
-  // Calculate total
-  let total = 0;
-  for (const item of items) {
-    const service = await prisma.service.findUnique({
-      where: { id: item.serviceId },
-    });
+  // Validate items and fetch service prices
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new NotFoundError('No items provided');
+  }
 
+  const serviceMap = new Map();
+
+  for (const item of items) {
+    const service = await prisma.service.findUnique({ where: { id: item.serviceId } });
     if (!service) {
       throw new NotFoundError('Service');
     }
-
-    total += service.unitPrice * item.quantity;
+    serviceMap.set(item.serviceId, service);
   }
 
-  // Create order
+  const itemsToCreate = items.map((item) => ({
+    serviceId: item.serviceId,
+    quantity: item.quantity,
+    unitPrice: serviceMap.get(item.serviceId).unitPrice,
+  }));
+
+  // Calculate total from persisted prices
+  const total = itemsToCreate.reduce((sum, it) => sum + Number(it.unitPrice) * Number(it.quantity || 1), 0);
+
+  // Create order with correct unit prices
   const order = await prisma.order.create({
     data: {
       id: uuidv4(),
@@ -44,11 +54,7 @@ export async function createOrder(data, userId, tenantId) {
       notes,
       idempotencyKey,
       items: {
-        create: items.map((item) => ({
-          serviceId: item.serviceId,
-          quantity: item.quantity,
-          unitPrice: 0, // Will be fetched from service
-        })),
+        create: itemsToCreate,
       },
     },
     include: {
@@ -61,16 +67,6 @@ export async function createOrder(data, userId, tenantId) {
     },
   });
 
-  // Fetch prices for items
-  const itemsWithPrices = await Promise.all(
-    order.items.map(async (item) => {
-      const service = await prisma.service.findUnique({
-        where: { id: item.serviceId },
-      });
-      return { ...item, unitPrice: service.unitPrice };
-    })
-  );
-
   const response = {
     id: order.id,
     tenantId: order.tenantId,
@@ -79,7 +75,7 @@ export async function createOrder(data, userId, tenantId) {
     providerId: order.providerId,
     status: order.status,
     total: order.total,
-    items: itemsWithPrices,
+    items: order.items,
     createdAt: order.createdAt,
   };
 
