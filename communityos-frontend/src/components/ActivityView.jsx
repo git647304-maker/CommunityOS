@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -102,6 +102,11 @@ export default function ActivityView({ token }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState("");
+
+  const refreshTimer = useRef(null);
+
   const selectedStatus = normalizeStatus(selectedOrder?.status);
   const statusTone = getStatusTone(selectedStatus);
 
@@ -111,52 +116,52 @@ export default function ActivityView({ token }) {
   );
 
   async function loadOrders({ silent = false } = {}) {
-  try {
-    if (!silent) setLoading(true);
-    setError("");
+    try {
+      if (!silent) setLoading(true);
+      setError("");
 
-    const result = await orderService.getOrders(1, 50);
+      const result = await orderService.getOrders(1, 50);
 
-    // orders.js already returns response.data.data
-    // so result may already be the array of orders.
-    const nextOrders = Array.isArray(result)
-      ? result
-      : Array.isArray(result?.data)
-        ? result.data
-        : [];
+      // orders.js already returns response.data.data
+      // so result may already be the array of orders.
+      const nextOrders = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.data)
+          ? result.data
+          : [];
 
-    console.log("Activity orders loaded:", nextOrders);
+      console.log("Activity orders loaded:", nextOrders);
 
-    setOrders(nextOrders);
+      setOrders(nextOrders);
 
-    setSelectedOrderId((currentId) => {
-      // Keep the currently selected order if it still exists.
-      if (
-        currentId &&
-        nextOrders.some((order) => order.id === currentId)
-      ) {
-        return currentId;
+      setSelectedOrderId((currentId) => {
+        // Keep the currently selected order if it still exists.
+        if (
+          currentId &&
+          nextOrders.some((order) => order.id === currentId)
+        ) {
+          return currentId;
+        }
+
+        // Otherwise automatically select the newest/first order.
+        return nextOrders[0]?.id || null;
+      });
+    } catch (requestError) {
+      console.error("Failed to load orders:", requestError);
+
+      const message =
+        requestError?.response?.data?.error?.message ||
+        requestError?.response?.data?.message ||
+        requestError?.message ||
+        "We could not load your orders. Please try again.";
+
+      setError(message);
+    } finally {
+      if (!silent) {
+        setLoading(false);
       }
-
-      // Otherwise automatically select the newest/first order.
-      return nextOrders[0]?.id || null;
-    });
-  } catch (requestError) {
-    console.error("Failed to load orders:", requestError);
-
-    const message =
-      requestError?.response?.data?.error?.message ||
-      requestError?.response?.data?.message ||
-      requestError?.message ||
-      "We could not load your orders. Please try again.";
-
-    setError(message);
-  } finally {
-    if (!silent) {
-      setLoading(false);
     }
   }
-}
 
   async function loadSelectedOrder(orderId, { silent = false } = {}) {
     if (!orderId) {
@@ -203,11 +208,28 @@ export default function ActivityView({ token }) {
 
     joinOrder(selectedOrderId);
 
+    const scheduleRefresh = () => {
+      if (refreshTimer.current) {
+        clearTimeout(refreshTimer.current);
+      }
+
+      refreshTimer.current = setTimeout(async () => {
+        try {
+          await loadSelectedOrder(selectedOrderId, { silent: true });
+          await loadOrders({ silent: true });
+        } catch (e) {
+          console.error('Scheduled refresh failed', e);
+        } finally {
+          refreshTimer.current = null;
+        }
+      }, 700);
+    };
+
     const refreshFromSocket = async (payload = {}) => {
       if (payload?.id && payload.id !== selectedOrderId) return;
 
-      await loadSelectedOrder(selectedOrderId, { silent: true });
-      await loadOrders({ silent: true });
+      // Debounce multiple rapid socket events
+      scheduleRefresh();
     };
 
     socket.on("timeline:updated", refreshFromSocket);
@@ -220,6 +242,11 @@ export default function ActivityView({ token }) {
       socket.off("order:accepted", refreshFromSocket);
       socket.off("order:in_progress", refreshFromSocket);
       socket.off("order:completed", refreshFromSocket);
+
+      if (refreshTimer.current) {
+        clearTimeout(refreshTimer.current);
+        refreshTimer.current = null;
+      }
     };
   }, [selectedOrderId]);
 
@@ -232,6 +259,28 @@ export default function ActivityView({ token }) {
       }
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function handleConfirmCompletion() {
+    if (!selectedOrder) return;
+
+    setConfirmError("");
+    setConfirming(true);
+
+    try {
+      await orderService.confirmOrder(selectedOrder.id);
+
+      // Refresh the UI to reflect the confirmed state
+      await loadSelectedOrder(selectedOrder.id, { silent: true });
+      await loadOrders({ silent: true });
+    } catch (err) {
+      console.error("Confirm failed", err);
+      setConfirmError(
+        err?.response?.data?.message || err?.message || "Failed to confirm. Try again."
+      );
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -438,51 +487,28 @@ export default function ActivityView({ token }) {
                   )}
                 </div>
 
-                
-import * as ordersApi from '../services/orders.js';
-import { useState } from 'react';
+                {selectedStatus === "COMPLETED" && (
+                  <div className="completion-notice">
+                    <CheckCircle2 size={19} />
+                    <div>
+                      <strong>Service completed</strong>
+                      <p>
+                        The provider has completed this request. The resident can confirm that they have received or accepted the service below.
+                      </p>
 
-// ... component state
-const [confirming, setConfirming] = useState(false);
-const [confirmError, setConfirmError] = useState(null);
+                      {confirmError && <div className="dashboard-error">{confirmError}</div>}
 
-async function handleConfirmCompletion() {
-  if (!selectedOrder) return;
-  setConfirmError(null);
-  setConfirming(true);
-  try {
-    await ordersApi.confirmOrder(selectedOrder.id);
-    // refresh order & timeline
-    await loadSelectedOrder(selectedOrder.id, { silent: true });
-    await loadOrders({ silent: true });
-  } catch (err) {
-    console.error('Confirm failed', err);
-    setConfirmError(err.response?.data?.message || 'Failed to confirm. Try again.');
-  } finally {
-    setConfirming(false);
-  }
-}
-
-// Render (replace completion-notice block)
-{selectedStatus === "COMPLETED" && (
-  <div className="completion-notice">
-    <CheckCircle2 size={19} />
-    <div>
-      <strong>Service completed</strong>
-      <p>The provider marked this request as completed. Please confirm when you are satisfied.</p>
-      {confirmError && <div className="error">{confirmError}</div>}
-      <button
-        type="button"
-        className="primary-button"
-        onClick={handleConfirmCompletion}
-        disabled={confirming}
-      >
-        {confirming ? 'Confirming…' : 'Confirm completion'}
-      </button>
-    </div>
-  </div>
-)}
-                
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={handleConfirmCompletion}
+                        disabled={confirming}
+                      >
+                        {confirming ? "Confirming…" : "Confirm completion"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <div className="empty-card">
