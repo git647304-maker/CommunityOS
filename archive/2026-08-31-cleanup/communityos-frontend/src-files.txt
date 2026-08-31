@@ -1,0 +1,15 @@
+﻿C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\App.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\index.css
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\main.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\styles.css
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\components\ActivityView.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\components\Dashboard.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\components\Header.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\components\Login.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\components\ManagerDashboard.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\components\OrderForm.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\components\ProviderDashboard.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\components\Services.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\components\ServicesSelect.jsx
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\services\api.js
+C:\Users\mosot\OneDrive\Desktop\CommunityOS\communityos-frontend\src\services\socket.js
