@@ -438,19 +438,51 @@ export default function ActivityView({ token }) {
                   )}
                 </div>
 
-                {selectedStatus === "COMPLETED" && (
-                  <div className="completion-notice">
-                    <CheckCircle2 size={19} />
-                    <div>
-                      <strong>Service completed</strong>
-                      <p>
-                        The provider has completed this request. The resident
-                        confirmation action will be connected once the backend
-                        confirmation endpoint is available.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                
+import * as ordersApi from '../services/orders.js';
+import { useState } from 'react';
+
+// ... component state
+const [confirming, setConfirming] = useState(false);
+const [confirmError, setConfirmError] = useState(null);
+
+async function handleConfirmCompletion() {
+  if (!selectedOrder) return;
+  setConfirmError(null);
+  setConfirming(true);
+  try {
+    await ordersApi.confirmOrder(selectedOrder.id);
+    // refresh order & timeline
+    await loadSelectedOrder(selectedOrder.id, { silent: true });
+    await loadOrders({ silent: true });
+  } catch (err) {
+    console.error('Confirm failed', err);
+    setConfirmError(err.response?.data?.message || 'Failed to confirm. Try again.');
+  } finally {
+    setConfirming(false);
+  }
+}
+
+// Render (replace completion-notice block)
+{selectedStatus === "COMPLETED" && (
+  <div className="completion-notice">
+    <CheckCircle2 size={19} />
+    <div>
+      <strong>Service completed</strong>
+      <p>The provider marked this request as completed. Please confirm when you are satisfied.</p>
+      {confirmError && <div className="error">{confirmError}</div>}
+      <button
+        type="button"
+        className="primary-button"
+        onClick={handleConfirmCompletion}
+        disabled={confirming}
+      >
+        {confirming ? 'Confirming…' : 'Confirm completion'}
+      </button>
+    </div>
+  </div>
+)}
+                
               </>
             ) : (
               <div className="empty-card">
