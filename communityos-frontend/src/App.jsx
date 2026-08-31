@@ -113,17 +113,18 @@ export default function App() {
    */
 
   useEffect(() => {
-    if (!token) {
-      closeSocket();
-      return;
-    }
+  if (!token) {
+     closeSocket();
+     return;
+   }
 
-    initSocket(token);
+   // Pass user object so the socket helper can emit auth identity after connect
+   initSocket(token, user);
 
-    return () => {
-      closeSocket();
-    };
-  }, [token]);
+   return () => {
+     closeSocket();
+   };
+ }, [token, user]);
 
   /*
    * =========================================================
