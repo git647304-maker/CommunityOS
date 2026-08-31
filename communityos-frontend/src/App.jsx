@@ -1,5 +1,4 @@
-
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Bell,
@@ -92,8 +91,7 @@ export default function App() {
 
   const [view, setView] = useState("dashboard");
   const [selectedServiceForOrder, setSelectedServiceForOrder] =
-  useState(null);
-  
+    useState(null);
 
   const [authMode, setAuthMode] = useState("login");
 
@@ -118,12 +116,13 @@ export default function App() {
       return;
     }
 
-    initSocket(token);
+    // Pass the user object so the socket helper can emit identity on connect
+    initSocket(token, user);
 
     return () => {
       closeSocket();
     };
-  }, [token]);
+  }, [token, user]);
 
   /*
    * =========================================================
@@ -287,37 +286,37 @@ export default function App() {
     />
   );
 
-      case "activity":
-        return (
-          <ActivityView token={token} />
-        );
+     case "activity":
+       return (
+         <ActivityView token={token} />
+       );
 
-      case "provider":
-        return (
-          <ProviderDashboard
-            token={token}
-            user={user}
-          />
-        );
+     case "provider":
+       return (
+         <ProviderDashboard
+           token={token}
+           user={user}
+         />
+       );
 
-      case "manager":
-        return (
-          <ManagerDashboard
-            token={token}
-            user={user}
-          />
-        );
+     case "manager":
+       return (
+         <ManagerDashboard
+           token={token}
+           user={user}
+         />
+       );
 
-      case "dashboard":
-      default:
-        return (
-          <Dashboard
-            token={token}
-            user={user}
-            role={role}
-            onNavigate={handleNavigate}
-          />
-        );
+     case "dashboard":
+     default:
+       return (
+         <Dashboard
+           token={token}
+           user={user}
+           role={role}
+           onNavigate={handleNavigate}
+         />
+       );
     }
   }
 
@@ -555,4 +554,3 @@ export default function App() {
     </div>
   );
 }
-
