@@ -14,6 +14,7 @@ import { initializeRedis, getRedisClient } from './config/redis.js';
 import logger from './config/logger.js';
 import { requestLogger, errorHandler } from './middleware/index.js';
 import { on, EVENTS } from './utils/events.js';
+import { verifyToken } from './utils/jwt.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -182,19 +183,38 @@ const io = new Server(server, {
 const connectedUsers = new Map();
 
 io.on('connection', (socket) => {
-  logger.info(
-    { socketId: socket.id },
-    'Socket connected'
-  );
+  logger.info({ socketId: socket.id }, 'Socket connected');
+
+  // Attempt to authenticate using token provided in the handshake.
+  // Prefer validating token at connection time to avoid relying on a
+  // follow-up 'auth' event from the client.
+  try {
+    const token = socket.handshake?.auth?.token;
+    if (token) {
+      const payload = verifyToken(token);
+      if (payload?.id) {
+        socket.userId = payload.id;
+        socket.tenantId = payload.tenantId;
+        connectedUsers.set(socket.id, payload.id);
+
+        logger.info({ socketId: socket.id, userId: payload.id }, 'Socket authenticated via token');
+      }
+    }
+  } catch (err) {
+    logger.warn({ socketId: socket.id }, 'Socket authentication failed - disconnecting');
+    socket.disconnect(true);
+    return;
+  }
 
   // ----------------------------------------------
-  // Track user connection
+  // Backwards-compatible auth event (optional)
   // ----------------------------------------------
 
   socket.on('auth', (data) => {
+    if (socket.userId) return; // already authenticated via token
+
     if (data?.userId) {
       connectedUsers.set(socket.id, data.userId);
-
       socket.userId = data.userId;
       socket.tenantId = data.tenantId;
     }
@@ -208,13 +228,7 @@ io.on('connection', (socket) => {
     if (orderId) {
       socket.join(`order:${orderId}`);
 
-      logger.info(
-        {
-          socketId: socket.id,
-          orderId,
-        },
-        'Joined order channel'
-      );
+      logger.info({ socketId: socket.id, orderId }, 'Joined order channel');
     }
   });
 
@@ -236,13 +250,7 @@ io.on('connection', (socket) => {
     if (providerId) {
       socket.join(`provider:${providerId}`);
 
-      logger.info(
-        {
-          socketId: socket.id,
-          providerId,
-        },
-        'Joined provider channel'
-      );
+      logger.info({ socketId: socket.id, providerId }, 'Joined provider channel');
     }
   });
 
@@ -254,13 +262,7 @@ io.on('connection', (socket) => {
     if (communityId) {
       socket.join(`community:${communityId}`);
 
-      logger.info(
-        {
-          socketId: socket.id,
-          communityId,
-        },
-        'Joined community channel'
-      );
+      logger.info({ socketId: socket.id, communityId }, 'Joined community channel');
     }
   });
 
@@ -281,10 +283,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     connectedUsers.delete(socket.id);
 
-    logger.info(
-      { socketId: socket.id },
-      'Socket disconnected'
-    );
+    logger.info({ socketId: socket.id }, 'Socket disconnected');
   });
 });
 
@@ -313,51 +312,36 @@ export function broadcastToTenant(tenantId, event, data) {
 // ==================================================
 
 on(EVENTS.ORDER_CREATED, ({ order }) => {
-  broadcastToTenant(
-    order.tenantId,
-    'order:created',
-    order
-  );
+  broadcastToTenant(order.tenantId, 'order:created', order);
 
   if (order.communityId) {
-    broadcastToCommunity(
-      order.communityId,
-      'order:created',
-      order
-    );
+    broadcastToCommunity(order.communityId, 'order:created', order);
   }
 });
 
 on(EVENTS.ORDER_ACCEPTED, ({ order }) => {
-  broadcastToOrder(
-    order.id,
-    'order:accepted',
-    order
-  );
+  broadcastToOrder(order.id, 'order:accepted', order);
 
   if (order.providerId) {
-    broadcastToProvider(
-      order.providerId,
-      'order:accepted',
-      order
-    );
+    broadcastToProvider(order.providerId, 'order:accepted', order);
   }
 });
 
 on(EVENTS.ORDER_IN_PROGRESS, ({ order }) => {
-  broadcastToOrder(
-    order.id,
-    'order:in_progress',
-    order
-  );
+  broadcastToOrder(order.id, 'order:in_progress', order);
 });
 
 on(EVENTS.ORDER_COMPLETED, ({ order }) => {
-  broadcastToOrder(
-    order.id,
-    'order:completed',
-    order
-  );
+  broadcastToOrder(order.id, 'order:completed', order);
+});
+
+// Timeline updates (new event)
+on(EVENTS.TIMELINE_UPDATED, ({ tenantId, orderId, event }) => {
+  try {
+    broadcastToOrder(orderId, 'timeline:updated', event);
+  } catch (err) {
+    logger.error({ err, orderId }, 'Failed to broadcast timeline update');
+  }
 });
 
 // ==================================================
@@ -373,33 +357,20 @@ async function startServer() {
     await prisma.$connect();
 
     server.listen(PORT, () => {
-      logger.info(
-        {
-          port: PORT,
-          origins: allowedOrigins.join(', '),
-        },
-        'CommunityOS Backend started'
-      );
+      logger.info({ port: PORT, origins: allowedOrigins.join(', ') }, 'CommunityOS Backend started');
 
       console.log('');
       console.log('========================================');
       console.log('        COMMUNITYOS BACKEND');
       console.log('========================================');
       console.log(`API:     http://localhost:${PORT}`);
-      console.log(
-        `Health:  http://localhost:${PORT}/api/health`
-      );
-      console.log(
-        `Frontend origins: ${allowedOrigins.join(', ')}`
-      );
+      console.log(`Health:  http://localhost:${PORT}/api/health`);
+      console.log(`Frontend origins: ${allowedOrigins.join(', ')}`);
       console.log('========================================');
       console.log('');
     });
   } catch (error) {
-    logger.error(
-      { error },
-      'Failed to start CommunityOS'
-    );
+    logger.error({ error }, 'Failed to start CommunityOS');
 
     process.exit(1);
   }
@@ -410,10 +381,7 @@ async function startServer() {
 // ==================================================
 
 async function shutdown(signal) {
-  logger.info(
-    { signal },
-    'Shutdown signal received'
-  );
+  logger.info({ signal }, 'Shutdown signal received');
 
   await prisma.$disconnect();
 
