@@ -26,3 +26,8 @@ export async function updateOrderStatus(orderId, status) {
   const response = await api.patch(`/orders/${orderId}/status`, { status });
   return response.data.data;
 }
+
+export async function confirmOrder(orderId) {
+  const response = await api.post(`/orders/${orderId}/confirm`);
+  return response.data.data;
+}
