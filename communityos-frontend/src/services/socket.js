@@ -2,7 +2,7 @@ import io from 'socket.io-client';
 
 let socket = null;
 
-export function initSocket(token) {
+export function initSocket(token, user) {
   if (socket) return socket;
 
   const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
@@ -16,6 +16,11 @@ export function initSocket(token) {
 
   socket.on('connect', () => {
     console.log('Socket connected:', socket.id);
+
+    // Send user identity after connect as a fallback for servers expecting an 'auth' event
+    if (user && user.id) {
+      socket.emit('auth', { userId: user.id, tenantId: user.tenantId });
+    }
   });
 
   socket.on('disconnect', () => {
