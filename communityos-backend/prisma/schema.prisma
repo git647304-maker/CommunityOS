@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  communities Community[]
+  providers   Provider[]
+  services    Service[]
+  orders      Order[]
+  events      Event[]
+  auditLogs   AuditLog[]
+  payments    Payment[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email        String
+  passwordHash String
+  fullName     String?
+  phone        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  roles             UserRole[]
+  orders            Order[]            @relation("resident_orders")
+  providerEmployees ProviderEmployee[]
+  providers         Provider[]
+  jobs              Job[]
+  auditLogs         AuditLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+}
+
+model UserRole {
+  id         String   @id @default(uuid())
+  userId     String
+  tenantId   String
+  role       RoleName
+  resourceId String? // Community or Provider ID for scoped roles
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role, resourceId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model Community {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  address   String?
+  meta      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([tenantId])
+}
+
+model Provider {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  companyName        String
+  contact            String?
+  verificationStatus String? // VERIFIED, PENDING, REJECTED
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  userId             String?
+  user               User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  employees ProviderEmployee[]
+  parentId  String?
+  parent    Provider?          @relation("ProviderHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Provider[]         @relation("ProviderHierarchy")
+  services  Service[]
+  orders    Order[]
+
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model ProviderEmployee {
+  id         String   @id @default(uuid())
+  providerId String
+  provider   Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  role       String // DRIVER, TECHNICIAN, MANAGER
+  createdAt  DateTime @default(now())
+
+  @@index([providerId])
+  @@index([userId])
+}
+
+model Service {
+  id          String   @id @default(uuid())
+  providerId  String
+  provider    Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  unitPrice   Float
+  serviceType String? // WATER, ELECTRICITY, GAS, WASTE, MAINTENANCE, etc.
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([providerId])
+  @@index([tenantId])
+}
+
+model Order {
+  id             String      @id @default(uuid())
+  tenantId       String
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  residentId     String
+  resident       User        @relation("resident_orders", fields: [residentId], references: [id], onDelete: Cascade)
+  communityId    String?
+  community      Community?  @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  providerId     String?
+  provider       Provider?   @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  status         OrderStatus @default(CREATED)
+  total          Float       @default(0)
+  notes          String?
+  idempotencyKey String?     @unique
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  job     Job?
+  items   OrderItem[]
+  payment Payment?
+  events  Event[]
+
+  @@index([tenantId])
+  @@index([residentId])
+  @@index([providerId])
+  @@index([communityId])
+  @@index([idempotencyKey])
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  quantity  Int
+  unitPrice Float
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([serviceId])
+}
+
+model Job {
+  id          String    @id @default(uuid())
+  orderId     String    @unique
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  workerId    String?
+  worker      User?     @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  status      String    @default("ASSIGNED") // ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED
+  scheduledAt DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workerId])
+}
+
+model Event {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type      String // ORDER_CREATED, PAYMENT_INITIATED, etc.
+  actorId   String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model Payment {
+  id        String        @id @default(uuid())
+  tenantId  String
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderId   String        @unique
+  order     Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount    Float
+  status    PaymentStatus @default(PENDING)
+  reference String?       @unique
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@index([reference])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String // CREATE, UPDATE, DELETE, VIEW
+  entity    String // ORDER, USER, PROVIDER, etc.
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum RoleName {
+  RESIDENT
+  MANAGER
+  PROVIDER_REP
+  WORKER
+  PLATFORM_ADMIN
+}
+
+enum OrderStatus {
+  CREATED
+  PROVIDER_ACCEPTED
+  WORKER_ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+}

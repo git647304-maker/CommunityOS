@@ -1,0 +1,57 @@
+{
+  "name": "communityos-backend",
+  "version": "1.0.0",
+  "description": "CommunityOS Backend - Event-driven multi-community service platform",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development nodemon --watch src --exec node src/server.js",
+    "start": "node src/server.js",
+    "migrate": "prisma migrate dev",
+    "prisma:generate": "prisma generate",
+    "seed": "node src/db/seed.js",
+    "lint": "eslint . --ext .js",
+    "format": "prettier --write .",
+    "ci": "npm run lint && npx prisma generate",
+    "test": "jest"
+  },
+  "keywords": [
+    "community",
+    "service",
+    "platform",
+    "event-driven"
+  ],
+  "author": "Charles Mosoti",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "@supabase/supabase-js": "^2.35.0",
+    "bcryptjs": "^2.4.3",
+    "bullmq": "^5.3.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.0",
+    "pino": "^8.17.2",
+    "pino-pretty": "^10.3.1",
+    "postgres": "^3.3.5",
+    "redis": "^5.0.0",
+    "socket.io": "^4.7.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "nodemon": "^3.0.2",
+    "prettier": "^2.0.0",
+    "prisma": "^7.9.1",
+    "supertest": "^6.0.0"
+  }
+}
